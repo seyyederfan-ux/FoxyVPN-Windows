@@ -46,6 +46,7 @@ fn settings_path(app: &AppHandle) -> Option<std::path::PathBuf> {
 
 fn auth_path(app: &AppHandle) -> Option<std::path::PathBuf> {
     let dir = app.path().app_data_dir().ok()?;
+    std::fs::create_dir_all(&dir).ok()?;
     Some(dir.join("auth.json"))
 }
 
@@ -101,7 +102,11 @@ async fn finish_login(app: &AppHandle, state: &State<'_, Arc<AppState>>, session
         expires_at: now + expires_in,
     };
     if let Some(p) = auth_path(app) {
-        let _ = serde_json::to_writer(std::fs::File::create(p).unwrap(), &serde_json::to_value(&auth).unwrap());
+        if let Ok(json_v) = serde_json::to_value(&auth) {
+            if let Ok(txt) = serde_json::to_string(&json_v) {
+                let _ = std::fs::write(&p, txt);
+            }
+        }
     }
     *state.auth.lock().await = Some(auth);
     Ok(())
