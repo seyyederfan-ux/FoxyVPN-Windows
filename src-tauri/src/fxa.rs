@@ -47,10 +47,17 @@ pub fn derive_auth_pw(email: &str, password: &str) -> String {
 
 fn hex(b: &[u8]) -> String { b.iter().map(|x| format!("{x:02x}")).collect() }
 
-pub fn derive_hawk_credentials(session_token: &str) -> (String, Vec<u8>) {
-    let key = B64.decode(session_token).unwrap_or_else(|_| session_token.as_bytes().to_vec());
+fn hex_decode(s: &str) -> Vec<u8> {
+    (0..s.len()).step_by(2)
+        .filter_map(|i| u8::from_str_radix(&s[i..i + 2], 16).ok())
+        .collect()
+}
+
+pub fn derive_hawk_credentials(session_token_hex: &str) -> (String, Vec<u8>) {
+    // FxA sessionToken is a HEX string (64 hex chars = 32 bytes), NOT base64
+    let key = hex_decode(session_token_hex);
     let expanded = hkdf_sha256(&key, &format!("{PROTOCOL_VERSION}sessionToken"), 64);
-    let id = B64.encode(&expanded[..32]);
+    let id = hex(&expanded[..32]); // tokenId is hex as well
     (id, expanded[32..].to_vec())
 }
 
@@ -169,5 +176,29 @@ mod tests {
         // cross-checked against independent Python reference implementation
         // (PBKDF2 1000 rounds + HKDF-SHA256, "identity.mozilla.com/picl/v1/authPW")
         assert_eq!(derive_auth_pw("andré@example.org", "pässwörd"), "247b675ffb4c46310bc87e26d712153abe5e1c90ef00a4784594f97ef54f2375");
+    }
+}
+
+#[cfg(test)]
+mod live_tests {
+    use super::*;
+    use crate::proto::http_client;
+    #[tokio::test]
+    async fn login_flow_real() {
+        let client = http_client();
+        let e = fxa_login(&client, "sadafadas132@gmail.com", "wrong-password-123").await;
+        // expect "Incorrect password" (errno 103) — if we get errno 110 the Hawk code is broken
+        println!("login result: {:?}", e);
+        assert!(e.is_err());
+        let msg = e.err().unwrap();
+        assert!(msg.contains("errno 103"), "unexpected: {msg}");
+    }
+    #[tokio::test]
+    async fn oauth_hawk_paths() {
+        // derive + hawk shouldn't panic; verify hawk id decodes
+        let (id, key) = derive_hawk_credentials("c0c23186f9d13e9ba8fac6ef7e8a9f6c0c23186f9d13e9ba8fac6ef7e8a9f6c1");
+        assert_eq!(key.len(), 32);
+        assert_eq!(id.len(), 64); // hex token id
+        assert!(id.chars().all(|c| c.is_ascii_hexdigit()));
     }
 }
