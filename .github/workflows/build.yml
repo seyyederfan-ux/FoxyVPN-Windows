@@ -1,0 +1,32 @@
+name: Build Windows
+on:
+  push:
+    tags: ["v*"]
+  workflow_dispatch:
+jobs:
+  build:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: src-tauri
+      - name: Build
+        run: cargo build --release --manifest-path src-tauri/Cargo.toml
+      - name: Bundle NSIS
+        shell: pwsh
+        run: |
+          cargo install tauri-cli --version ^2 --locked
+          cd src-tauri
+          cargo tauri build --no-bundle 2>$null
+          cd ..
+          cargo tauri build --config src-tauri/tauri.conf.json 2>$null || cargo tauri build
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: FoxyVPN-Windows
+          path: |
+            src-tauri/target/release/foxyvpn-windows.exe
+            src-tauri/target/release/bundle/nsis/*.exe
+          if-no-files-found: error

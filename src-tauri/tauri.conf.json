@@ -1,0 +1,19 @@
+{
+  "$schema": "https://schema.tauri.app/config/2",
+  "productName": "FoxyVPN",
+  "version": "1.0.0",
+  "identifier": "dev.foxy.windows",
+  "build": { "frontendDist": "../src" },
+  "app": {
+    "windows": [
+      { "title": "FoxyVPN — Windows", "width": 430, "height": 760, "minWidth": 380, "minHeight": 620, "resizable": true }
+    ],
+    "security": { "csp": null }
+  },
+  "bundle": {
+    "active": true,
+    "targets": ["nsis"],
+    "icon": ["icons/icon.ico"],
+    "windows": { "webviewInstallMode": { "type": "embedBootstrapper" } }
+  }
+}
