@@ -26,11 +26,15 @@ pub struct Settings {
     pub http_port: u16,
     pub selected_code: String, // country code or "" = recommended
     pub selected_city: String,
+    #[serde(default = "default_true")]
+    pub full_tunnel: bool,
 }
+
+fn default_true() -> bool { true }
 
 impl Default for Settings {
     fn default() -> Self {
-        Settings { socks_port: 1080, http_port: 8080, selected_code: String::new(), selected_city: String::new() }
+        Settings { socks_port: 1080, http_port: 8080, selected_code: String::new(), selected_city: String::new(), full_tunnel: true }
     }
 }
 
@@ -208,6 +212,7 @@ async fn connect(
             state.settings.lock().await.socks_port,
             state.settings.lock().await.http_port,
             state.logs.clone(),
+            state.settings.lock().await.full_tunnel,
         ).await {
             Ok(t) => { tunnel_opt = Some(t); break; }
             Err(e) => { last_err = e; continue; }

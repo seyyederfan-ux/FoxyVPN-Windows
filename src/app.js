@@ -158,7 +158,7 @@ async function refreshCountries() {
     list.appendChild(el);
   }
 }
-function pickDone() { updateLocationCard(); $('serversOverlay').classList.remove('show'); invoke('save_settings', { settings: { socks_port: 1080, http_port: 8080, selected_code: selected.code, selected_city: selected.city } }).catch(() => {}); }
+function pickDone() { updateLocationCard(); $('serversOverlay').classList.remove('show'); invoke('save_settings', { settings: { socks_port: 1080, http_port: 8080, selected_code: selected.code, selected_city: selected.city, full_tunnel: $('fullTunnelChk').checked } }).catch(() => {}); }
 
 function updateLocationCard() {
   const c = countries.find(x => x.code === selected.code);
@@ -191,11 +191,12 @@ $('settingsBtn').onclick = async () => {
   const s = await invoke('load_settings').catch(() => ({ socks_port: 1080, http_port: 8080 }));
   $('socksPortInp').value = s.socks_port;
   $('httpPortInp').value = s.http_port;
+  $('fullTunnelChk').checked = s.full_tunnel !== false;
   $('settingsOverlay').classList.add('show');
 };
 $('closeSettings').onclick = () => $('settingsOverlay').classList.remove('show');
 $('saveSettings').onclick = async () => {
-  await invoke('save_settings', { settings: { socks_port: +$('socksPortInp').value || 1080, http_port: +$('httpPortInp').value || 0, selected_code: selected.code, selected_city: selected.city } });
+  await invoke('save_settings', { settings: { socks_port: +$('socksPortInp').value || 1080, http_port: +$('httpPortInp').value || 0, selected_code: selected.code, selected_city: selected.city, full_tunnel: $('fullTunnelChk').checked } });
   $('settingsOverlay').classList.remove('show');
 };
 $('logoutBtn').onclick = async () => {

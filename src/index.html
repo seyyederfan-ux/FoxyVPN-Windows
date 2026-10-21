@@ -144,6 +144,10 @@
       <input class="inp" id="socksPortInp" type="number" value="1080">
       <label style="font-size:12px;color:var(--on-variant)">Local HTTP proxy port (0 = off)</label>
       <input class="inp" id="httpPortInp" type="number" value="8080">
+      <label style="display:flex;align-items:center;gap:8px;margin-top:6px;font-size:13px">
+        <input type="checkbox" id="fullTunnelChk" checked>
+        <span>Full system tunnel (route all Windows traffic through VPN)</span>
+      </label>
       <button class="btn" id="saveSettings">Save</button>
       <button class="btn secondary" id="logoutBtn" style="margin-top:8px">Sign out</button>
       <button class="btn secondary" id="closeSettings">Close</button>

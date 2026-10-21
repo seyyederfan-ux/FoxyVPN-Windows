@@ -144,11 +144,16 @@ pub struct Tunnel {
     pub edge_port: u16,
     pub logs: Arc<Mutex<Vec<String>>>,
     stop: watch::Sender<bool>,
+    tun2proxy_child: Mutex<Option<tokio::process::Child>>,
 }
 
 impl Tunnel {
     pub fn stop(&self) {
         let _ = self.stop.send(true);
+        if let Some(child) = self.tun2proxy_child.try_lock().ok().and_then(|mut g| g.take()) {
+            let mut c = child;
+            let _ = c.start_kill();
+        }
     }
 }
 
@@ -166,6 +171,7 @@ pub async fn start_tunnel(
     socks_port: u16,
     http_port: u16,
     logs: Arc<Mutex<Vec<String>>>,
+    full_tunnel: bool,
 ) -> Result<Tunnel, String> {
     let (stop_tx, mut stop_rx) = watch::channel(false);
     let upstream = Arc::new(H2Upstream::connect(&edge_host, edge_port).await?);
@@ -236,6 +242,41 @@ pub async fn start_tunnel(
         });
     }
 
+    // Full system tunnel: spawn tun2proxy with --setup (creates wintun TUN + routes).
+    // Must bypass the edge server and loopback so the upstream tunnel itself stays direct.
+    let mut tun2proxy_child: Option<tokio::process::Child> = None;
+    if full_tunnel {
+        #[cfg(target_os = "windows")]
+        {
+            let exe = std::env::current_exe()
+                .ok()
+                .and_then(|p| p.parent().map(|d| d.join("bin").join("tun2proxy-bin.exe")))
+                .unwrap_or_else(|| std::path::PathBuf::from("tun2proxy-bin.exe"));
+            let edge_ip = resolve_host_ipv4(&edge_host).await;
+            let mut cmd = tokio::process::Command::new(&exe);
+            cmd.arg("--proxy").arg(format!("socks5://127.0.0.1:{socks_port}"))
+                .arg("--setup");
+            if let Some(ip) = &edge_ip {
+                cmd.arg("--bypass").arg(format!("{ip}/32"));
+            }
+            cmd.arg("--bypass").arg("127.0.0.0/8");
+            push_log(&logs, &format!("starting tun2proxy full-tunnel ({})", exe.display())).await;
+            match cmd.spawn() {
+                Ok(child) => {
+                    tun2proxy_child = Some(child);
+                    push_log(&logs, "tun2proxy started — full system tunnel active (wintun TUN)").await;
+                }
+                Err(e) => {
+                    push_log(&logs, &format!("tun2proxy failed to start: {e} — falling back to proxy-only")).await;
+                }
+            }
+        }
+        #[cfg(not(target_os = "windows"))]
+        {
+            push_log(&logs, "full tunnel requested but not supported on this platform — proxy-only").await;
+        }
+    }
+
     Ok(Tunnel {
         proxy_pass: pass,
         socks_port,
@@ -244,7 +285,19 @@ pub async fn start_tunnel(
         edge_port,
         logs,
         stop: stop_tx,
+        tun2proxy_child: Mutex::new(tun2proxy_child),
     })
+}
+
+async fn resolve_host_ipv4(host: &str) -> Option<String> {
+    use tokio::net::lookup_host;
+    let addrs: Vec<_> = lookup_host((host, 0u16)).await.ok()?.collect();
+    for a in addrs {
+        if a.is_ipv4() {
+            return Some(a.ip().to_string());
+        }
+    }
+    None
 }
 
 async fn read_exact_or_err<T: AsyncRead + Unpin>(s: &mut T, buf: &mut [u8]) -> Result<(), String> {
