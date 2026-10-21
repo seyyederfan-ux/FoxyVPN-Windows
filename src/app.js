@@ -232,6 +232,12 @@ listen('vpn-edge-ip', (e) => {
   markIp(true, ip, country);
 });
 listen('vpn-state', (e) => setStatus(e.payload));
+listen('vpn-mismatch', (e) => {
+  $('errorText').textContent = e.payload.message;
+  $('errorText').classList.remove('hidden');
+  $('ipBadge').textContent = 'Not tunneling';
+  $('ipBadge').className = 'badge bad';
+});
 
 // ---- init ----
 (async () => {

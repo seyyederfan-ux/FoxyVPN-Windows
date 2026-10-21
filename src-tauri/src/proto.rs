@@ -8,7 +8,7 @@ pub const GUARDIAN_ENDPOINT: &str = "https://vpn.mozilla.org";
 pub const SERVER_LIST_URL: &str =
     "https://firefox.settings.services.mozilla.com/v1/buckets/main/collections/vpn-serverlist/records";
 pub const UA: &str = "MozillaVPN/2.35.0 (sys:linux; iap:true)";
-pub const EXIT_CHECK_URL: &str = "https://www.cloudflare.com/cdn-cgi/trace";
+pub const EXIT_CHECK_URL: &str = "https://1.1.1.1/cdn-cgi/trace"; // IPv4-only host: no IPv6 leak in the check
 
 #[derive(Serialize, Clone)]
 pub struct VpnCountry {

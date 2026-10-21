@@ -291,7 +291,8 @@ pub async fn start_tunnel(
             let edge_ip = resolve_host_ipv4(&edge_host).await;
             let mut cmd = tokio::process::Command::new(&exe);
             cmd.arg("--proxy").arg(format!("socks5://127.0.0.1:{socks_port}"))
-                .arg("--setup");
+                .arg("--setup")
+                .arg("--ipv6-enabled");
             if let Some(ip) = &edge_ip {
                 cmd.arg("--bypass").arg(format!("{ip}/32"));
             }

@@ -234,8 +234,15 @@ async fn connect(
     let app2 = app.clone();
     tokio::spawn(async move {
         let app = app2;
+        tokio::time::sleep(std::time::Duration::from_secs(3)).await;
         if let Ok((ip, loc)) = fetch_exit_info().await {
             let _ = app.emit("vpn-edge-ip", json!({"ip": ip, "country": loc}));
+            let sel = code.to_uppercase();
+            if !sel.is_empty() && !loc.eq_ignore_ascii_case(&sel) {
+                let _ = app.emit("vpn-mismatch", json!({
+                    "message": format!("Traffic is NOT exiting via {sel} (exit: {loc}). The tunnel is not carrying your traffic — check Settings/Logs, or the tunnel fell back to proxy-only mode.")
+                }));
+            }
         }
     });
     let _ = app.emit("vpn-state", "CONNECTED");
