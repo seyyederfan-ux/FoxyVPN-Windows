@@ -106,7 +106,6 @@ $('loginBtn').onclick = async () => {
   btn.textContent = 'Signing in…';
   $('loginErr').textContent = '';
   try {
-  try {
     if (pending2fa) {
       await invoke('submit_2fa', { code: $('codeInp').value.trim() });
       await invoke('complete_2fa');
