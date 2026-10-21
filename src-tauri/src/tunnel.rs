@@ -13,6 +13,35 @@ pub fn now_stamp() -> String {
     format!("[{:02}:{:02}:{:02}]", (s % 86400) / 3600, (s % 3600) / 60, s % 60)
 }
 
+/// Resolve a hostname via Cloudflare DoH (works even when system DNS is poisoned). Returns IPv4.
+pub async fn doh_resolve(host: &str) -> Option<String> {
+    // fast path: already an IP
+    if host.parse::<std::net::Ipv4Addr>().is_ok() {
+        return Some(host.to_string());
+    }
+    let url = format!("https://1.1.1.1/dns-query?name={host}&type=A");
+    let client = reqwest::Client::builder()
+        .user_agent("MozillaVPN/2.35.0 (sys:linux; iap:true)")
+        .resolve("1.1.1.1", std::net::SocketAddr::from(([1, 1, 1, 1], 443)))
+        .build().ok()?;
+    let txt = client.get(&url)
+        .header("Accept", "application/dns-json")
+        .timeout(std::time::Duration::from_secs(8))
+        .send().await.ok()?.text().await.ok()?;
+    let v: serde_json::Value = serde_json::from_str(&txt).ok()?;
+    let answers = v.get("Answer")?.as_array()?.clone();
+    for a in answers {
+        if a.get("type").and_then(|t| t.as_i64()) == Some(1) {
+            if let Some(data) = a.get("data").and_then(|d| d.as_str()) {
+                if data.parse::<std::net::Ipv4Addr>().is_ok() {
+                    return Some(data.to_string());
+                }
+            }
+        }
+    }
+    None
+}
+
 fn tls_connector() -> TlsConnector {
     let mut roots = RootCertStore::empty();
     roots.extend(webpki_roots::TLS_SERVER_ROOTS.iter().cloned());
@@ -27,8 +56,15 @@ pub struct H2Upstream {
 
 impl H2Upstream {
     pub async fn connect(host: &str, port: u16) -> Result<Self, String> {
-        let addr = format!("{host}:{port}");
-        let tcp = TcpStream::connect(&addr).await.map_err(|e| format!("TCP {addr}: {e}"))?;
+        // DNS via DoH bootstrap (system DNS may be poisoned/blocked); fall back to system resolver.
+        let addr = match crate::tunnel::doh_resolve(host).await {
+            Some(ip) => format!("{ip}:{port}"),
+            None => format!("{host}:{port}"),
+        };
+        let tcp = tokio::time::timeout(std::time::Duration::from_secs(15), TcpStream::connect(&addr))
+            .await
+            .map_err(|_| format!("TCP {addr}: timed out (15s)"))?
+            .map_err(|e| format!("TCP {addr}: {e}"))?;
         tcp.set_nodelay(true).ok();
         let server_name = ServerName::try_from(host.to_string()).map_err(|e| e.to_string())?;
         let tls = tls_connector().connect(server_name, tcp).await.map_err(|e| format!("TLS: {e}"))?;
@@ -420,4 +456,14 @@ async fn handle_http_proxy(
         tokio::io::copy(&mut sr, &mut cw)
     );
     Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    #[tokio::test]
+    async fn doh_works() {
+        let ip = crate::tunnel::doh_resolve("us.m1.fastly-masque.net").await;
+        println!("doh -> {:?}", ip);
+        assert!(ip.is_some());
+    }
 }

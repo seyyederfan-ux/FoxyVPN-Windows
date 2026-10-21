@@ -211,16 +211,18 @@ async fn connect(
     // try candidates in order
     let mut last_err = String::new();
     let mut tunnel_opt = None;
+    let socks_p = state.settings.lock().await.socks_port;
+    let http_p = state.settings.lock().await.http_port;
+    let full_t = state.settings.lock().await.full_tunnel;
     for (host, port) in candidates.iter().take(5) {
-        match tunnel::start_tunnel(
+        let attempt = tunnel::start_tunnel(
             host.clone(), *port, pass.token.clone(),
-            state.settings.lock().await.socks_port,
-            state.settings.lock().await.http_port,
-            state.logs.clone(),
-            state.settings.lock().await.full_tunnel,
-        ).await {
-            Ok(t) => { tunnel_opt = Some(t); break; }
-            Err(e) => { last_err = e; continue; }
+            socks_p, http_p, state.logs.clone(), full_t,
+        );
+        match tokio::time::timeout(std::time::Duration::from_secs(20), attempt).await {
+            Ok(Ok(t)) => { tunnel_opt = Some(t); break; }
+            Ok(Err(e)) => { last_err = e; continue; }
+            Err(_) => { last_err = format!("timeout dialing {host}:{port} (20s)"); continue; }
         }
     }
     let t = tunnel_opt.ok_or_else(|| format!("all dial attempts failed; last: {last_err}"))?;
