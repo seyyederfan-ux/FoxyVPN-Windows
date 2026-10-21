@@ -1,4 +1,8 @@
 // FoxyVPN Windows frontend
+if (!window.__TAURI__) {
+  document.body.innerHTML = '<div style="padding:20px;color:#ef5350;font-family:sans-serif">Tauri API failed to load (withGlobalTauri). Please reinstall.</div>';
+  throw new Error('no tauri');
+}
 const { invoke } = window.__TAURI__.core;
 const { listen } = window.__TAURI__.event;
 
@@ -99,7 +103,9 @@ let pending2fa = false;
 $('loginBtn').onclick = async () => {
   const btn = $('loginBtn');
   btn.disabled = true;
+  btn.textContent = 'Signing in…';
   $('loginErr').textContent = '';
+  try {
   try {
     if (pending2fa) {
       await invoke('submit_2fa', { code: $('codeInp').value.trim() });
@@ -119,7 +125,8 @@ $('loginBtn').onclick = async () => {
     $('loginOverlay').classList.remove('show');
     await afterLogin();
   } catch (e) {
-    $('loginErr').textContent = String(e).slice(0, 200);
+    $('loginErr').textContent = String(e).slice(0, 250);
+    btn.textContent = 'Sign in';
   }
   btn.disabled = false;
 };
